@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>The Ledger Gallery</title>
+<meta name="description" content="A first-person gallery maze. Fire at the paintings to uncover real moments from crypto history. Hunt for the right one before your ammo runs out.">
+<style>
+:root{--p0:#140d05;--p1:#5c3a12;--p2:#c27d1a;--p3:#ffd98a;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--p0);overflow:hidden;font-family:"Courier New",Courier,monospace;color:var(--p3);
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+#stage{position:fixed;inset:0}
+canvas#view{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+#fx{position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.2) 3px),
+             radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(0,0,0,.7) 100%)}
+.hidden{display:none!important}
+button{font:inherit;font-weight:bold;color:var(--p0);background:var(--p3);border:2px solid var(--p2);padding:11px 18px;cursor:pointer;touch-action:manipulation}
+button:hover{background:#fff0c4}
+button:focus-visible,a:focus-visible{outline:3px solid var(--p3);outline-offset:2px}
+button.alt{background:transparent;color:var(--p3)}
+button.alt:hover{background:rgba(255,217,138,.12)}
+/* HUD */
+#hud{position:absolute;inset:0;z-index:8;pointer-events:none;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left));
+  font-weight:bold;font-size:clamp(11px,2.5vw,15px);text-shadow:0 0 6px #000,0 0 2px #000}
+#hudL{position:absolute;left:max(10px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:8px;align-items:flex-start;max-width:58%}
+#menuBtn{pointer-events:auto;padding:6px 10px;font-size:inherit}
+#clue{background:rgba(20,13,5,.82);border:2px solid var(--p2);padding:8px 10px;line-height:1.35}
+#clue b{display:block;font-size:1.25em;color:#fff0c4}
+#clue span{color:var(--p2)}
+#compass{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(20,13,5,.7);border:2px solid var(--p1);padding:3px 10px}
+#hudR{position:absolute;right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+#mini{width:clamp(112px,30vw,170px);height:auto;aspect-ratio:1/1;image-rendering:pixelated;background:rgba(20,13,5,.85);border:2px solid var(--p2)}
+#stats{white-space:pre;text-align:right;background:rgba(20,13,5,.7);padding:4px 8px;border:2px solid var(--p1)}
+#stats.low{color:#ff9a5a}
+#toast{position:absolute;left:50%;bottom:22%;transform:translateX(-50%);background:rgba(20,13,5,.85);border:2px solid var(--p2);padding:6px 12px;opacity:0;transition:opacity .2s;white-space:nowrap}
+#toast.on{opacity:1}
+/* touch */
+#touch{position:absolute;inset:0;z-index:7}
+#look{position:absolute;right:0;top:110px;bottom:0;width:58%;touch-action:none}
+#joy{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(22px,env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;border:2px solid var(--p2);background:rgba(20,13,5,.45);touch-action:none}
+#knob{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;background:rgba(255,217,138,.7);border:2px solid var(--p3);transform:translate(-50%,-50%)}
+#fireBtn{position:absolute;z-index:9;right:max(18px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));width:96px;height:96px;border-radius:50%;
+  background:#b3351b;color:#ffe8c4;border:3px solid #ffb27a;font-size:20px;letter-spacing:1px;padding:0}
+#fireBtn:active{background:#e04a2a}
+/* screens */
+.screen{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(14,9,3,.9);padding:16px;overflow:auto;-webkit-user-select:text;user-select:text}
+.card{max-width:540px;width:100%;margin:auto;border:2px solid var(--p2);background:var(--p0);padding:22px;box-shadow:0 0 0 4px var(--p1),0 0 50px rgba(194,125,26,.25);touch-action:pan-y}
+h1{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:normal;font-size:clamp(36px,9vw,58px);line-height:1;margin:0 0 10px;color:var(--p3)}
+h2{font-family:Georgia,"Times New Roman",serif;font-weight:normal;font-size:clamp(24px,6vw,32px);line-height:1.1;margin:6px 0 10px;color:#fff0c4}
+p{line-height:1.5;margin:0 0 12px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+ul.how{margin:0 0 12px;padding-left:18px;line-height:1.55;font-size:14px;color:#e9c681}
+.dim{color:var(--p2);font-size:13px}
+.meta{display:flex;gap:10px;align-items:baseline;color:var(--p2)}
+.meta .yr{font-size:28px;font-weight:bold;color:var(--p3)}
+.mrow{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+#mArt{width:112px;height:112px;image-rendering:pixelated;border:2px solid var(--p2);flex:none;background:var(--p1)}
+.mtxt{flex:1;min-width:200px}
+#mBadge{font-weight:bold;margin:6px 0 12px}
+#mBadge.ok{color:#c9f58a}
+#mBadge.no{color:var(--p2)}
+a{color:var(--p3)}
+a.btnlink{display:inline-block;font-weight:bold;text-decoration:none;border:2px solid var(--p2);padding:11px 18px;color:var(--p3)}
+a.btnlink:hover{background:rgba(255,217,138,.12)}
+#endList{margin:0 0 12px;padding-left:18px;line-height:1.5;font-size:14px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="view"></canvas>
+  <div id="fx"></div>
+
+  <div id="hud" class="hidden">
+    <div id="hudL"><button id="menuBtn" class="alt">menu</button><div id="clue" class="hidden"></div></div>
+    <div id="compass">N</div>
+    <div id="hudR"><canvas id="mini" width="132" height="132" aria-label="Map"></canvas><div id="stats"></div></div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div id="look"></div>
+    <div id="joy"><div id="knob"></div></div>
+  </div>
+  <button id="fireBtn" class="hidden" aria-label="Fire">FIRE</button>
+
+  <div id="title" class="screen">
+    <div class="card">
+      <h1>The Ledger Gallery</h1>
+      <p>Every painting on these walls is a real moment from crypto history. Shoot one to find out which.</p>
+      <div class="btns">
+        <button id="btnHunt">Start the hunt</button>
+        <button id="btnRoam" class="alt">Free roam</button>
+      </div>
+      <ul class="how">
+        <li>Hunt: a clue names a painting. Find it before your ammo runs out. A correct find refills some.</li>
+        <li>Fire twice at a painting to reveal what happened.</li>
+        <li>Move: WASD (or the left stick). Look: mouse, arrow keys, or drag the right side. Shift sprints.</li>
+        <li>Fire: click, Space, Enter, or the FIRE button.</li>
+        <li>Each painting shows its year on a plaque. Use that.</li>
+        <li>The maze and painting positions are the same every run. The map (top right) shows your position; bright squares are paintings you haven't revealed yet.</li>
+        <li>Ammo only goes down when you fire. There is no timer on it. The hunt ends when it hits zero.</li>
+      </ul>
+      <p class="dim" id="seenCount"></p>
+      <p class="dim">Inspired by The Galleria. Custom engine and procedural art, no shared code or assets. Facts are written from public history; the Wikipedia link opens a search for each topic.</p>
+    </div>
+  </div>
+
+  <div id="end" class="screen hidden">
+    <div class="card">
+      <h1 id="endTitle">Hunt complete</h1>
+      <p id="endSub"></p>
+      <ol id="endList"></ol>
+      <div class="btns">
+        <button id="endAgain">Hunt again</button>
+        <button id="endShare" class="alt">Copy result</button>
+        <button id="endMenu" class="alt">Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal" class="screen hidden">
+    <div class="card">
+      <div class="mrow">
+        <canvas id="mArt" width="64" height="64"></canvas>
+        <div class="mtxt">
+          <div class="meta"><span class="yr" id="mYear"></span><span id="mCat"></span></div>
+          <h2 id="mTitle"></h2>
+        </div>
+      </div>
+      <p id="mText"></p>
+      <div id="mBadge"></div>
+      <div class="btns">
+        <button id="mClose">Keep walking</button>
+        <a id="mLink" class="btnlink" target="_blank" rel="noopener noreferrer">Read more on Wikipedia</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- palette & data ---------- */
+const P = ["#140d05", "#5c3a12", "#c27d1a", "#ffd98a"];
+const CATS = { btc: "bitcoin", eth: "ethereum", hack: "hack", defi: "defi", nft: "nft", law: "policy", mkt: "market", ppl: "people" };
+
+// [year, category, title, text, wikipedia search]
+const RAW = [
+["2008","btc","The Bitcoin whitepaper","On Oct 31, 2008, Satoshi Nakamoto sent a nine-page paper, “Bitcoin: A Peer-to-Peer Electronic Cash System,” to a cryptography mailing list.","Bitcoin white paper"],
+["2009","btc","The Genesis block","Satoshi mined block 0 on Jan 3, 2009. Its coinbase embeds a Times headline about bank bailouts. The 50 BTC reward in that block can never be spent.","Genesis block Bitcoin"],
+["2009","btc","Bitcoin software goes public","Satoshi released the first Bitcoin software in early January 2009. Early nodes were run mostly by cypherpunks and hobbyists.","History of bitcoin"],
+["2009","btc","The first transaction","On Jan 12, 2009, Satoshi sent 10 BTC to cypherpunk Hal Finney in block 170, the first person-to-person Bitcoin payment.","Hal Finney (computer scientist)"],
+["2009","btc","The first price","In Oct 2009, New Liberty Standard published the first exchange rate: 1,309.03 BTC per US dollar, based on the electricity cost of mining.","History of bitcoin"],
+["2009","btc","The satoshi","The smallest unit of bitcoin is one hundred-millionth of a coin (0.00000001 BTC). It is named the satoshi, after the creator.","Bitcoin units satoshi"],
+["2009","btc","21 million coins","Bitcoin's supply is capped at 21 million coins. Because the reward keeps halving, the last coin is expected to be mined around the year 2140.","Bitcoin supply"],
+["2010","btc","Bitcoin Pizza Day","On May 22, 2010, Laszlo Hanyecz paid 10,000 BTC for two pizzas, the first widely known real-world purchase made with Bitcoin.","Laszlo Hanyecz"],
+["2010","btc","The 184 billion bitcoin bug","On Aug 15, 2010, an overflow bug created 184 billion BTC in a single block. Developers patched it and the network reorganized within hours.","Bitcoin value overflow incident"],
+["2010","ppl","Satoshi tells WikiLeaks no","In Dec 2010, Satoshi asked WikiLeaks not to accept Bitcoin, saying the young project needed to grow gradually and stay out of the spotlight.","WikiLeaks"],
+["2011","ppl","Satoshi disappears","In April 2011, Satoshi told developer Mike Hearn they had moved on to other things. Nobody has verifiably heard from them since.","Satoshi Nakamoto"],
+["2011","mkt","Dollar parity","In Feb 2011, one bitcoin reached one US dollar for the first time.","History of bitcoin"],
+["2011","hack","The Mt. Gox flash crash","In June 2011, a hacked account dumped a pile of coins on Mt. Gox, and the price there briefly collapsed from about $17 to a single cent.","Mt. Gox"],
+["2011","defi","Litecoin launches","Charlie Lee, a former Google engineer, released Litecoin in Oct 2011 as a lighter “silver” to Bitcoin's gold.","Litecoin"],
+["2011","law","Silk Road opens","Silk Road, a hidden marketplace that ran on bitcoin, launched in Feb 2011. The FBI shut it down in Oct 2013 and seized about 144,000 BTC.","Silk Road (marketplace)"],
+["2012","btc","The first halving","On Nov 28, 2012, Bitcoin's block reward dropped from 50 to 25 BTC, the first of the scheduled halvings.","Bitcoin halving"],
+["2013","mkt","Bitcoin passes $1,000","In Nov 2013, Bitcoin crossed $1,000 for the first time, then fell sharply in the following weeks.","History of bitcoin"],
+["2013","eth","The Ethereum whitepaper","In late 2013, 19-year-old Vitalik Buterin proposed Ethereum, a blockchain with a built-in programming language for smart contracts.","Ethereum"],
+["2013","defi","Dogecoin appears","Dogecoin launched in Dec 2013 as a joke built around the Shiba Inu meme, and it never went away.","Dogecoin"],
+["2014","hack","Mt. Gox collapses","In Feb 2014, Mt. Gox halted withdrawals and filed for bankruptcy, saying about 850,000 BTC were missing. Repayments to creditors only began in 2024.","Mt. Gox"],
+["2014","eth","Ethereum's crowd sale","In 2014, Ethereum's presale raised about 31,000 BTC over 42 days, which funded the first years of development.","Ethereum"],
+["2015","eth","Ethereum goes live","Ethereum's mainnet launched on July 30, 2015, with the Frontier release aimed at developers.","Ethereum"],
+["2015","btc","The Lightning Network paper","In Feb 2015, Joseph Poon and Thaddeus Dryja published a draft for the Lightning Network, a layer on top of Bitcoin for fast, cheap payments.","Lightning Network"],
+["2015","eth","ERC-20 is proposed","Fabian Vogelsteller proposed the ERC-20 token standard in Nov 2015. It became the template for thousands of tokens.","ERC-20"],
+["2016","hack","The DAO hack","In June 2016, an attacker drained about 3.6 million ETH from The DAO. Ethereum split over the response, creating Ethereum and Ethereum Classic.","The DAO (organization)"],
+["2016","hack","Bitfinex loses 120,000 BTC","In Aug 2016, Bitfinex was hacked for about 120,000 BTC. US authorities seized around 94,000 BTC tied to the theft in 2022.","Bitfinex"],
+["2016","btc","Zcash launches","Zcash went live in Oct 2016 and brought zero-knowledge proofs to a major cryptocurrency for private transactions.","Zcash"],
+["2017","hack","The Parity freeze","In Nov 2017, a user accidentally triggered a bug in a shared Parity library and froze about 513,000 ETH in multisig wallets.","Parity Wallet"],
+["2017","nft","CryptoPunks arrive","Larva Labs released 10,000 pixel-art CryptoPunks in 2017, free to anyone with an Ethereum wallet. It was an early blueprint for NFT collections.","CryptoPunks"],
+["2017","nft","CryptoKitties clogs Ethereum","In Dec 2017, the collectible cat game CryptoKitties flooded Ethereum with transactions and slowed the whole network.","CryptoKitties"],
+["2017","btc","SegWit goes live","Segregated Witness activated in Aug 2017. It fixed transaction malleability and opened the door to the Lightning Network.","SegWit"],
+["2017","btc","Bitcoin Cash splits off","On Aug 1, 2017, a group that wanted bigger blocks forked Bitcoin, creating Bitcoin Cash.","Bitcoin Cash"],
+["2017","mkt","Wall Street gets futures","Cboe launched Bitcoin futures on Dec 10, 2017, and CME followed a week later.","Bitcoin futures"],
+["2017","mkt","Almost $20,000","Bitcoin neared $20,000 in mid-Dec 2017, before a bear market erased most of that over the next year.","Cryptocurrency bubble"],
+["2017","defi","The ICO boom","In 2017, projects raised billions through ICOs. EOS alone raised roughly $4 billion in a sale that lasted a year.","Initial coin offering"],
+["2018","hack","Coincheck hacked","In Jan 2018, hackers took about 523 million NEM coins from Japan's Coincheck, worth roughly $530 million at the time.","Coincheck"],
+["2018","mkt","The crypto winter","Bitcoin lost roughly 80% from its Dec 2017 high and bottomed near $3,200 in Dec 2018.","Cryptocurrency bubble"],
+["2018","hack","BitConnect collapses","In Jan 2018, the lending platform BitConnect shut down, and its promoters' hype videos became meme material.","BitConnect"],
+["2019","hack","Binance loses 7,000 BTC","In May 2019, hackers withdrew about 7,000 BTC from Binance's hot wallet. The exchange covered users from its insurance fund.","Binance"],
+["2019","hack","Ethereum Classic is 51% attacked","In Jan 2019, attackers took over most of Ethereum Classic's mining power and double-spent roughly $1 million of ETC.","Ethereum Classic"],
+["2019","law","Facebook announces Libra","In June 2019, Facebook unveiled the Libra stablecoin project. Regulators pushed back, and its successor, Diem, shut down in early 2022.","Diem (digital currency)"],
+["2020","mkt","Black Thursday","On Mar 12, 2020, Bitcoin fell about half in a day. Network congestion hit MakerDAO, and some vault auctions closed on zero-dollar bids.","MakerDAO"],
+["2020","defi","Yield farming takes off","Compound began distributing COMP tokens to its users in June 2020, setting off “DeFi summer” and a rush of yield-farming projects.","Yield farming"],
+["2020","defi","The Uniswap airdrop","In Sept 2020, Uniswap gave 400 UNI to every address that had used it before Sept 1. That was worth over a thousand dollars at the time.","Uniswap"],
+["2020","eth","The Beacon Chain starts","On Dec 1, 2020, Ethereum's Beacon Chain began running, and anyone with 32 ETH could start staking.","Ethereum"],
+["2020","mkt","MicroStrategy buys bitcoin","In Aug 2020, MicroStrategy bought about 21,000 BTC as a treasury asset, the start of the public-company Bitcoin treasury trend.","MicroStrategy"],
+["2020","mkt","PayPal adds crypto","In Oct 2020, PayPal let US customers buy, hold, and sell crypto, bringing it to a mainstream payments app.","PayPal"],
+["2020","hack","The Twitter bitcoin scam","In July 2020, attackers took over accounts of famous people and promised to double any bitcoin sent to them. Victims sent over $100,000.","2020 Twitter bitcoin scam"],
+["2021","mkt","Coinbase goes public","Coinbase listed directly on Nasdaq on Apr 14, 2021, the first major US crypto exchange to do so.","Coinbase"],
+["2021","law","El Salvador adopts Bitcoin","On Sept 7, 2021, El Salvador made Bitcoin legal tender, the first country to do so.","Bitcoin in El Salvador"],
+["2021","law","China bans crypto trading","In Sept 2021, China declared crypto transactions illegal, after cracking down on mining that spring. Many miners moved abroad.","Cryptocurrency in China"],
+["2021","nft","Beeple's $69 million sale","In Mar 2021, Christie's sold Beeple's “Everydays: The First 5000 Days” for $69.3 million, the first purely digital artwork sold by a major auction house.","Beeple"],
+["2021","nft","Bored Apes appear","Bored Ape Yacht Club launched in Apr 2021 with 10,000 apes at 0.08 ETH each, and became a status symbol.","Bored Ape"],
+["2021","nft","A tweet sells for $2.9 million","In Mar 2021, Jack Dorsey's first tweet sold as an NFT for about $2.9 million.","Non-fungible token"],
+["2021","mkt","Tesla buys, then pauses","Tesla disclosed a $1.5 billion bitcoin purchase in Feb 2021, then paused accepting it for cars in May 2021, citing environmental concerns.","Tesla, Inc."],
+["2021","btc","Taproot activates","Taproot, Bitcoin's biggest upgrade since SegWit, activated in Nov 2021. It improved privacy and made complex scripts cheaper.","Taproot"],
+["2021","eth","EIP-1559 starts burning fees","The London upgrade, on Aug 5, 2021, began burning the base fee of every Ethereum transaction.","Ethereum"],
+["2021","hack","The Poly Network heist","In Aug 2021, an attacker took about $611 million from Poly Network, then returned nearly all of it within weeks.","Poly Network"],
+["2021","hack","Colonial Pipeline ransom","In May 2021, Colonial Pipeline paid 75 BTC to ransomware attackers. The US Justice Department later recovered about 63.7 BTC.","Colonial Pipeline ransomware attack"],
+["2021","hack","The Squid token rug pull","In Nov 2021, a token named after a hit TV show soared, and then its creators vanished with the money after buyers found they could not sell.","Squid (cryptocurrency)"],
+["2021","mkt","The $69,000 peak","Bitcoin hit a record near $69,000 in Nov 2021, before falling through most of 2022.","Bitcoin"],
+["2021","hack","Solana stops for hours","In Sept 2021, Solana stalled for about 17 hours after a flood of bot transactions during a token sale.","Solana (blockchain platform)"],
+["2022","hack","Wormhole bridge exploited","In Feb 2022, an attacker minted 120,000 wrapped ETH on Solana through a flaw in Wormhole, about $320 million. Jump Crypto replaced the funds.","Wormhole (blockchain)"],
+["2022","hack","The Ronin bridge is drained","In Mar 2022, hackers stole about $625 million from the Ronin bridge used by Axie Infinity. The FBI later linked it to North Korea's Lazarus Group.","Axie Infinity"],
+["2022","mkt","Terra and Luna implode","In May 2022, the algorithmic stablecoin UST lost its dollar peg and took LUNA with it, wiping out roughly $40 billion.","Terra (blockchain)"],
+["2022","mkt","Celsius freezes withdrawals","On June 12, 2022, lender Celsius halted withdrawals. It filed for bankruptcy a month later.","Celsius Network"],
+["2022","mkt","Three Arrows Capital falls","In June 2022, the hedge fund Three Arrows Capital failed to meet margin calls and collapsed, hitting lenders across the market.","Three Arrows Capital"],
+["2022","law","Tornado Cash is sanctioned","On Aug 8, 2022, the US Treasury sanctioned the Tornado Cash smart contracts, an unusual step against code that nobody owns.","Tornado Cash"],
+["2022","hack","The Nomad bridge free-for-all","In Aug 2022, a bug let anyone replay a withdrawal. Hundreds of copycat wallets drained about $190 million.","Nomad bridge hack"],
+["2022","eth","The Merge","On Sept 15, 2022, Ethereum switched from mining to proof of stake, cutting its energy use by about 99.95%.","Ethereum"],
+["2022","mkt","FTX collapses","FTX filed for bankruptcy on Nov 11, 2022, days after reports that its sister firm Alameda held large amounts of FTT.","FTX"],
+["2022","nft","A Punk for $23.7 million","In Feb 2022, CryptoPunk #5822, one of the rare alien Punks, sold for 8,000 ETH, about $23.7 million.","CryptoPunks"],
+["2023","btc","Ordinals begin","In Jan 2023, Casey Rodarmor's Ordinals protocol let people inscribe images and text onto individual satoshis, sparking a Bitcoin NFT wave.","Ordinals Bitcoin"],
+["2023","mkt","SVB shakes the stablecoins","In Mar 2023, USDC briefly fell to about $0.88 when Circle disclosed $3.3 billion stuck in Silicon Valley Bank.","Circle (company)"],
+["2023","hack","The Euler Finance exploit","In Mar 2023, Euler Finance lost about $197 million to a flash-loan attack, and the hacker returned most of the funds.","Euler Finance"],
+["2023","law","Binance pleads guilty","In Nov 2023, Binance agreed to pay $4.3 billion, and founder Changpeng Zhao stepped down and pleaded guilty to anti-money-laundering violations.","Changpeng Zhao"],
+["2024","law","SBF gets 25 years","In Mar 2024, Sam Bankman-Fried was sentenced to 25 years in prison for fraud connected to FTX.","Sam Bankman-Fried"],
+["2024","law","Wright is not Satoshi","In Mar 2024, a UK High Court judge ruled that Craig Wright is not Satoshi Nakamoto, and found he had relied on forged documents.","Craig Wright"],
+["2024","btc","Spot Bitcoin ETFs","On Jan 10, 2024, the SEC approved the first US spot Bitcoin ETFs, and 11 of them began trading the next day.","Bitcoin ETF"],
+["2024","eth","Dencun adds blobs","The Dencun upgrade, in Mar 2024, introduced blob transactions (EIP-4844), which made rollup fees on Ethereum much cheaper.","Ethereum"],
+["2024","btc","The fourth halving","On Apr 20, 2024, at block 840,000, Bitcoin's reward fell from 6.25 to 3.125 BTC.","Bitcoin halving"],
+["2024","eth","Spot Ether ETFs","US spot Ether ETFs began trading on July 23, 2024, about six months after the Bitcoin ones.","Exchange-traded fund Ethereum"],
+["2024","mkt","Bitcoin crosses $100,000","Bitcoin first traded above $100,000 on Dec 5, 2024.","Bitcoin"],
+["2025","hack","The Bybit heist","On Feb 21, 2025, attackers took about $1.5 billion in ETH from Bybit's cold wallet, the largest crypto theft on record. The FBI blamed North Korea's Lazarus Group.","Bybit"],
+["2025","law","A US Bitcoin reserve","In Mar 2025, a US executive order created a Strategic Bitcoin Reserve to hold coins forfeited to the government.","Strategic Bitcoin Reserve"],
+["2025","eth","The Pectra upgrade","Ethereum's Pectra upgrade went live on May 7, 2025, and raised the maximum validator stake from 32 to 2,048 ETH.","Ethereum"],
+["2025","law","The GENIUS Act","On July 18, 2025, the US signed the GENIUS Act, the first federal law that sets rules for payment stablecoins.","GENIUS Act"]
+];
+const FACTS = RAW.map((f, i) => ({ id: i, year: f[0], cat: f[1], title: f[2], text: f[3], q: f[4] }));
+
+/* ---------- utils ---------- */
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function shuffle(arr, rng) { for (let i = arr.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+
+let seen = new Set(), bestScore = 0, muted = false;
+try { seen = new Set(JSON.parse(localStorage.getItem("ledger_seen") || "[]")); } catch (e) {}
+try { bestScore = parseInt(localStorage.getItem("ledger_best") || "0", 10) || 0; } catch (e) {}
+try { muted = localStorage.getItem("ledger_mute") === "1"; } catch (e) {}
+function saveSeen() { try { localStorage.setItem("ledger_seen", JSON.stringify([...seen])); } catch (e) {} }
+
+/* ---------- audio ---------- */
+let ac = null;
+function ensureAudio() { try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); else if (ac.state === "suspended") ac.resume(); } catch (e) {} }
+function beep(f, d, type, v, slide) {
+  if (!ac || muted) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f * slide), t + d);
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + 0.02);
+}
+const sfx = {
+  shot: () => { beep(190, 0.14, "square", 0.07, 0.3); beep(1000, 0.05, "sawtooth", 0.03, 0.3); },
+  hit: () => beep(110, 0.1, "triangle", 0.08, 0.5),
+  reveal: () => { beep(520, 0.12, "triangle", 0.07); setTimeout(() => beep(780, 0.16, "triangle", 0.07), 90); },
+  good: () => { beep(660, 0.1, "square", 0.05); setTimeout(() => beep(990, 0.1, "square", 0.05), 90); setTimeout(() => beep(1320, 0.18, "square", 0.05), 180); },
+  dry: () => beep(90, 0.06, "square", 0.04)
+};
+
+/* ---------- canvas / render setup ---------- */
+const cv = $("view"), ctx = cv.getContext("2d");
+let W = 480, H = 300, unit = 0, gradC, gradF;
+const PL = 0.66;
+function resize() {
+  W = window.innerWidth > 900 ? 640 : 480;
+  H = clamp(Math.round(W * window.innerHeight / window.innerWidth), 220, 720);
+  cv.width = W; cv.height = H; ctx.imageSmoothingEnabled = false;
+  unit = W / (2 * PL);
+  gradC = ctx.createLinearGradient(0, 0, 0, H / 2); gradC.addColorStop(0, P[0]); gradC.addColorStop(1, "#2a1a08");
+  gradF = ctx.createLinearGradient(0, H / 2, 0, H); gradF.addColorStop(0, "#1c1106"); gradF.addColorStop(1, P[1]);
+}
+window.addEventListener("resize", resize); resize();
+
+/* ---------- textures ---------- */
+const brickTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  const r = mulberry32(99);
+  g.fillStyle = P[1]; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 90; i++) { g.fillStyle = r() < 0.5 ? P[2] : P[0]; g.globalAlpha = 0.25 + r() * 0.25; g.fillRect((r() * 64) | 0, (r() * 64) | 0, 1 + ((r() * 2) | 0), 1); }
+  g.globalAlpha = 1;
+  for (let row = 0; row < 8; row++) {
+    const y = row * 8; g.fillStyle = P[0]; g.fillRect(0, y, 64, 1);
+    const off = (row % 2) * 16; for (let x = off; x < 64; x += 32) g.fillRect(x, y, 1, 8);
+    g.fillStyle = P[2]; g.globalAlpha = 0.28; g.fillRect(0, y + 1, 64, 1); g.globalAlpha = 1;
+  }
+  return c;
+})();
+
+function disc(g, x, y, r, fill, edge) { g.fillStyle = edge; g.beginPath(); g.arc(x, y, r + 1.6, 0, 7); g.fill(); g.fillStyle = fill; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+function poly(g, pts, fill, edge) { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.lineWidth = 2; g.strokeStyle = edge; g.stroke(); g.fillStyle = fill; g.fill(); }
+
+function drawIcon(g, cat, cx, cy) {
+  const L = P[3], D = P[0], M = P[2];
+  g.lineJoin = "round"; g.lineCap = "round";
+  if (cat === "btc") {
+    disc(g, cx, cy, 11, L, D);
+    g.fillStyle = D; g.font = "bold 15px 'Courier New',monospace"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("B", cx, cy + 1);
+  } else if (cat === "eth") {
+    poly(g, [[cx, cy - 14], [cx + 9, cy + 1], [cx, cy + 5], [cx - 9, cy + 1]], L, D);
+    poly(g, [[cx, cy + 8], [cx + 9, cy + 3], [cx, cy + 14], [cx - 9, cy + 3]], M, D);
+  } else if (cat === "hack") {
+    g.strokeStyle = D; g.lineWidth = 6; g.beginPath(); g.arc(cx, cy - 3, 6, Math.PI, 0); g.stroke();
+    g.strokeStyle = L; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy - 3, 6, Math.PI, 0); g.stroke();
+    g.fillStyle = D; g.fillRect(cx - 11, cy - 4, 22, 17); g.fillStyle = L; g.fillRect(cx - 9, cy - 2, 18, 13);
+    g.strokeStyle = D; g.lineWidth = 2; g.beginPath(); g.moveTo(cx + 3, cy - 2); g.lineTo(cx - 1, cy + 3); g.lineTo(cx + 3, cy + 6); g.lineTo(cx, cy + 11); g.stroke();
+  } else if (cat === "defi") {
+    const hs = [9, 15, 22];
+    for (let i = 0; i < 3; i++) { const x = cx - 14 + i * 10, h = hs[i]; g.fillStyle = D; g.fillRect(x - 1, cy + 12 - h - 1, 10, h + 2); g.fillStyle = i === 2 ? L : M; g.fillRect(x, cy + 12 - h, 8, h); }
+    disc(g, cx + 8, cy - 9, 4, L, D);
+  } else if (cat === "nft") {
+    g.fillStyle = D; g.fillRect(cx - 14, cy - 14, 28, 28); g.fillStyle = M; g.fillRect(cx - 12, cy - 12, 24, 24); g.fillStyle = L; g.fillRect(cx - 9, cy - 7, 18, 17);
+    g.fillStyle = D; g.fillRect(cx - 6, cy - 3, 3, 3); g.fillRect(cx + 3, cy - 3, 3, 3); g.fillRect(cx - 4, cy + 4, 8, 2); g.fillRect(cx - 10, cy - 11, 20, 4);
+  } else if (cat === "law") {
+    poly(g, [[cx - 14, cy - 4], [cx, cy - 14], [cx + 14, cy - 4]], L, D);
+    for (const o of [-10, -2.5, 5]) { g.fillStyle = D; g.fillRect(cx + o - 1, cy - 4, 8, 15); g.fillStyle = L; g.fillRect(cx + o, cy - 3, 6, 13); }
+    g.fillStyle = D; g.fillRect(cx - 15, cy + 10, 30, 5); g.fillStyle = L; g.fillRect(cx - 14, cy + 11, 28, 3);
+  } else if (cat === "mkt") {
+    g.strokeStyle = M; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx - 15, cy - 13); g.lineTo(cx - 15, cy + 13); g.lineTo(cx + 15, cy + 13); g.stroke();
+    const pts = [[-12, 6], [-6, -1], [-1, 4], [5, -7], [13, -12]];
+    g.strokeStyle = D; g.lineWidth = 6; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(cx + p[0], cy + p[1]) : g.moveTo(cx + p[0], cy + p[1])); g.stroke();
+    g.strokeStyle = L; g.lineWidth = 3; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(cx + p[0], cy + p[1]) : g.moveTo(cx + p[0], cy + p[1])); g.stroke();
+  } else { // people
+    g.fillStyle = D; g.beginPath(); g.ellipse(cx, cy + 13, 15, 11, 0, Math.PI, 0); g.fill();
+    g.fillStyle = L; g.beginPath(); g.ellipse(cx, cy + 13, 13, 9, 0, Math.PI, 0); g.fill();
+    disc(g, cx, cy - 5, 6, L, D);
+  }
+}
+
+function makeArt(f) {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  const r = mulberry32(f.id * 7919 + 13);
+  g.drawImage(brickTex, 0, 0);
+  g.fillStyle = P[0]; g.fillRect(12, 7, 44, 43);               // drop shadow
+  g.fillStyle = P[2]; g.fillRect(10, 5, 44, 43);               // frame
+  g.fillStyle = P[3]; g.fillRect(11, 6, 42, 1); g.fillRect(11, 6, 1, 41);
+  g.fillStyle = P[0]; g.fillRect(13, 8, 38, 37);               // mat
+  const px = 15, py = 10, pw = 34, ph = 33;
+  g.save(); g.beginPath(); g.rect(px, py, pw, ph); g.clip();
+  const a = P[1], b = r() < 0.5 ? P[0] : P[2], type = (r() * 5) | 0;
+  g.fillStyle = a; g.fillRect(px, py, pw, ph); g.fillStyle = b;
+  if (type === 0) for (let y = 0; y < ph; y += 6) g.fillRect(px, py + y, pw, 3);
+  else if (type === 1) for (let y = 0; y < ph; y += 4) for (let x = 0; x < pw; x += 4) if (((x + y) / 4) % 2 === 0) g.fillRect(px + x, py + y, 4, 4);
+  else if (type === 2) { g.globalAlpha = 0.6; for (let k = -ph; k < pw; k += 8) { g.beginPath(); g.moveTo(px + k, py + ph); g.lineTo(px + k + 4, py + ph); g.lineTo(px + k + 4 + ph, py); g.lineTo(px + k + ph, py); g.fill(); } g.globalAlpha = 1; }
+  else if (type === 3) { const rg = g.createRadialGradient(px + pw / 2, py + ph / 2, 2, px + pw / 2, py + ph / 2, 26); rg.addColorStop(0, P[2]); rg.addColorStop(1, P[0]); g.fillStyle = rg; g.fillRect(px, py, pw, ph); }
+  else for (let y = 2; y < ph; y += 6) for (let x = 2; x < pw; x += 6) g.fillRect(px + x, py + y, 2, 2);
+  g.fillStyle = P[3]; for (let i = 0; i < 6; i++) g.fillRect(px + ((r() * pw) | 0), py + ((r() * ph) | 0), 1, 1);
+  drawIcon(g, f.cat, px + pw / 2, py + ph / 2);
+  g.restore();
+  // plaque with the year
+  g.fillStyle = P[2]; g.fillRect(21, 50, 22, 10); g.fillStyle = P[0]; g.fillRect(22, 51, 20, 8);
+  g.fillStyle = P[3]; g.font = "bold 8px 'Courier New',monospace"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(f.year, 32, 55.5);
+  return c;
+}
+
+function stampHole(tex, tx, ty) {
+  const g = tex.getContext("2d"); const x = tx + 0.5, y = ty + 0.5;
+  g.strokeStyle = P[0]; g.lineWidth = 1;
+  for (let i = 0; i < 6; i++) { const an = i * 1.05 + tx * 0.7, l = 3 + (i % 3) * 1.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(an) * l, y + Math.sin(an) * l); g.stroke(); }
+  g.fillStyle = P[3]; g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill();
+  g.fillStyle = P[0]; g.beginPath(); g.arc(x, y, 1.9, 0, 7); g.fill();
+}
+
+/* ---------- level ---------- */
+const MZ = 16, N = MZ * 2 + 1;
+const GALLERY_SEED = 20081031;   // fixed layout: same maze and same paintings every run
+let grid, texArr, artAt, vis;
+function newLevel(seed) {
+  const rng = mulberry32(seed);
+  grid = Array.from({ length: N }, () => new Uint8Array(N).fill(1));
+  const stack = [[1, 1]]; grid[1][1] = 0;
+  const dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const opts = dirs.filter(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx > 0 && ny > 0 && nx < N - 1 && ny < N - 1 && grid[ny][nx] === 1; });
+    if (!opts.length) { stack.pop(); continue; }
+    const [dx, dy] = opts[(rng() * opts.length) | 0];
+    grid[y + dy / 2][x + dx / 2] = 0; grid[y + dy][x + dx] = 0; stack.push([x + dx, y + dy]);
+  }
+  let loops = 26, tries = 0;
+  while (loops > 0 && tries < 800) {
+    tries++;
+    const x = 1 + ((rng() * (N - 2)) | 0), y = 1 + ((rng() * (N - 2)) | 0);
+    if ((x + y) % 2 !== 1 || grid[y][x] === 0) continue;
+    const horiz = x % 2 === 0;
+    const a = horiz ? grid[y][x - 1] : grid[y - 1][x], b = horiz ? grid[y][x + 1] : grid[y + 1][x];
+    if (a === 0 && b === 0) { grid[y][x] = 0; loops--; }
+  }
+  texArr = new Array(N * N).fill(null); artAt = new Array(N * N).fill(null); vis = new Uint8Array(N * N);
+  const segs = [];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (grid[y][x] === 1 && (x + y) % 2 === 1) segs.push(y * N + x);
+  shuffle(segs, rng);
+  const ids = shuffle(FACTS.map(f => f.id), rng);
+  const n = Math.min(ids.length, segs.length);
+  for (let i = 0; i < n; i++) {
+    const tex = makeArt(FACTS[ids[i]]);
+    texArr[segs[i]] = tex; artAt[segs[i]] = { id: ids[i], hits: 0, revealed: false, tex, key: segs[i] };
+  }
+  pl.x = 1.5; pl.y = 1.5; pl.a = grid[1][2] === 0 ? 0 : Math.PI / 2;
+}
+
+/* ---------- raycasting ---------- */
+const HR = { mx: 0, my: 0, side: 0, dist: 0, wx: 0, hit: 0 };
+function cast(px, py, rdx, rdy) {
+  let mx = px | 0, my = py | 0;
+  const ddx = Math.abs(1 / (rdx || 1e-9)), ddy = Math.abs(1 / (rdy || 1e-9));
+  let sx, sy, sdx, sdy;
+  if (rdx < 0) { sx = -1; sdx = (px - mx) * ddx; } else { sx = 1; sdx = (mx + 1 - px) * ddx; }
+  if (rdy < 0) { sy = -1; sdy = (py - my) * ddy; } else { sy = 1; sdy = (my + 1 - py) * ddy; }
+  let side = 0, hit = 0;
+  for (let i = 0; i < 80; i++) {
+    if (sdx < sdy) { sdx += ddx; mx += sx; side = 0; } else { sdy += ddy; my += sy; side = 1; }
+    if (mx < 0 || my < 0 || mx >= N || my >= N) break;
+    if (grid[my][mx] === 1) { hit = 1; break; }
+  }
+  const dist = side === 0 ? sdx - ddx : sdy - ddy;
+  let wx = side === 0 ? py + dist * rdy : px + dist * rdx; wx -= Math.floor(wx);
+  HR.mx = mx; HR.my = my; HR.side = side; HR.dist = dist; HR.wx = wx; HR.hit = hit;
+  return HR;
+}
+function texX(h, rdx, rdy) {
+  let tx = (h.wx * 64) | 0; if (tx > 63) tx = 63;
+  if (h.side === 0 && rdx < 0) tx = 63 - tx;
+  if (h.side === 1 && rdy > 0) tx = 63 - tx;
+  return tx;
+}
+
+function render() {
+  const hh = H / 2 | 0;
+  ctx.fillStyle = gradC; ctx.fillRect(0, 0, W, hh);
+  ctx.fillStyle = gradF; ctx.fillRect(0, hh, W, H - hh);
+  const dx = Math.cos(pl.a), dy = Math.sin(pl.a), plx = -dy * PL, ply = dx * PL;
+  for (let x = 0; x < W; x++) {
+    const cx = 2 * x / W - 1, rdx = dx + plx * cx, rdy = dy + ply * cx;
+    const h = cast(pl.x, pl.y, rdx, rdy);
+    if (!h.hit) continue;
+    const perp = Math.max(h.dist, 0.05), lh = unit / perp;
+    const y0 = Math.floor(H / 2 - lh / 2), hgt = Math.ceil(lh) + 1;
+    const tex = texArr[h.my * N + h.mx] || brickTex;
+    ctx.drawImage(tex, texX(h, rdx, rdy), 0, 1, 64, x, y0, 1, hgt);
+    const sh = Math.min(0.9, perp / 10) + (h.side ? 0.16 : 0);
+    ctx.fillStyle = "rgba(20,13,5," + sh.toFixed(2) + ")";
+    ctx.fillRect(x, y0, 1, hgt);
+  }
+}
+function drawGun() {
+  const s = H / 300, cx = W / 2, by = H + recoil * 10 * s;
+  ctx.fillStyle = P[0]; ctx.fillRect(cx - 13 * s, by - 74 * s, 26 * s, 74 * s);
+  ctx.fillStyle = P[1]; ctx.fillRect(cx - 10 * s, by - 72 * s, 20 * s, 72 * s);
+  ctx.fillStyle = P[2]; ctx.fillRect(cx - 7 * s, by - 72 * s, 6 * s, 72 * s);
+  ctx.fillStyle = P[0]; ctx.fillRect(cx - 5 * s, by - 80 * s, 10 * s, 10 * s);
+  if (flash > 0) {
+    ctx.fillStyle = P[3]; ctx.beginPath();
+    const fx = cx, fy = by - 92 * s;
+    for (let i = 0; i < 8; i++) { const an = i * Math.PI / 4, rr = (i % 2 ? 9 : 20) * s; ctx.lineTo(fx + Math.cos(an) * rr, fy + Math.sin(an) * rr); }
+    ctx.fill();
+  }
+  // crosshair
+  ctx.fillStyle = P[3]; const c = Math.max(1, Math.round(s));
+  ctx.fillRect(W / 2 - 5 * c, H / 2, 3 * c, c); ctx.fillRect(W / 2 + 2 * c, H / 2, 3 * c, c);
+  ctx.fillRect(W / 2, H / 2 - 5 * c, c, 3 * c); ctx.fillRect(W / 2, H / 2 + 2 * c, c, 3 * c);
+}
+
+/* ---------- game state ---------- */
+const pl = { x: 1.5, y: 1.5, a: 0 };
+let state = "title", hunt = true;
+let time = 0, tTime = 0, score = 0, ammo = 14, targets = [], ti = 0, foundList = [], pendingWin = false;
+let fireCd = 0, recoil = 0, flash = 0, outTimer = 0, modalVisible = false, lastWinSummary = "";
+const keys = {};
+const jv = { x: 0, y: 0 };
+let locked = false, lockFailed = false;
+const coarse = window.matchMedia("(pointer: coarse)").matches;
+
+function startGame(mode) {
+  ensureAudio();
+  hunt = mode === "hunt";
+  newLevel(GALLERY_SEED);
+  time = 0; tTime = 0; score = 0; ammo = 14; ti = 0; foundList = []; pendingWin = false; outTimer = 0; fireCd = 0.3;
+  if (hunt) targets = shuffle(FACTS.map(f => f.id), Math.random).slice(0, 5); else targets = [];
+  $("title").classList.add("hidden"); $("end").classList.add("hidden"); $("modal").classList.add("hidden");
+  $("hud").classList.remove("hidden"); $("fireBtn").classList.remove("hidden");
+  if (coarse) $("touch").classList.remove("hidden");
+  $("clue").classList.toggle("hidden", !hunt);
+  state = "play"; modalVisible = false; lastClue = ""; lastStats = "";
+  if (!coarse && !lockFailed) tryLock();
+}
+function goTitle() {
+  state = "title"; try { document.exitPointerLock(); } catch (e) {}
+  $("hud").classList.add("hidden"); $("fireBtn").classList.add("hidden"); $("touch").classList.add("hidden");
+  $("end").classList.add("hidden"); $("modal").classList.add("hidden"); $("title").classList.remove("hidden");
+  updateSeen();
+}
+function updateSeen() { $("seenCount").textContent = "Facts uncovered: " + seen.size + " of " + FACTS.length + (bestScore ? "   Best hunt: " + bestScore : ""); }
+function tryLock() { try { const p = cv.requestPointerLock(); if (p && p.catch) p.catch(() => { lockFailed = true; }); } catch (e) { lockFailed = true; } }
+
+let toastT = 0;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); toastT = 1.4; }
+
+function fire() {
+  if (state !== "play" || fireCd > 0) return;
+  if (hunt && ammo <= 0) { sfx.dry(); return; }
+  ensureAudio();
+  fireCd = 0.3; recoil = 1; flash = 0.09;
+  if (hunt) ammo--;
+  sfx.shot();
+  const rdx = Math.cos(pl.a), rdy = Math.sin(pl.a);
+  const h = cast(pl.x, pl.y, rdx, rdy);
+  if (!h.hit) return;
+  const key = h.my * N + h.mx, tx = texX(h, rdx, rdy), ty = 30 + ((Math.random() * 6) | 0);
+  const art = artAt[key];
+  let tex = texArr[key];
+  if (!tex) { tex = document.createElement("canvas"); tex.width = tex.height = 64; tex.getContext("2d").drawImage(brickTex, 0, 0); texArr[key] = tex; }
+  stampHole(tex, tx, ty);
+  sfx.hit();
+  if (!art) { toast("Just brick."); return; }
+  if (tx < 11 || tx > 53) { toast("You clipped the frame."); return; }
+  if (art.revealed) { setTimeout(() => onReveal(art), 250); state = "modal"; return; }
+  art.hits++;
+  if (art.hits >= 2) { art.revealed = true; state = "modal"; setTimeout(() => onReveal(art), 380); }
+  else toast("Hit. One more shot to reveal it.");
+}
+
+function onReveal(art) {
+  const f = FACTS[art.id];
+  if (!seen.has(art.id)) { seen.add(art.id); saveSeen(); }
+  let badge = { text: "", cls: "" };
+  if (hunt) {
+    if (art.id === targets[ti]) {
+      const pts = 100 + Math.max(0, 240 - Math.floor(tTime));
+      score += pts; ammo = Math.min(20, ammo + 6); foundList.push(art.id); ti++; tTime = 0;
+      badge = { text: "Target found. +" + pts + " points, +6 ammo.", cls: "ok" };
+      if (ti >= targets.length) pendingWin = true;
+      sfx.good();
+    } else { badge = { text: "Not your target, but now you know.", cls: "no" }; sfx.reveal(); }
+  } else sfx.reveal();
+  openModal(art, badge);
+}
+function openModal(art, badge) {
+  try { document.exitPointerLock(); } catch (e) {}
+  const f = FACTS[art.id];
+  $("mYear").textContent = f.year; $("mCat").textContent = CATS[f.cat];
+  $("mTitle").textContent = f.title; $("mText").textContent = f.text;
+  $("mLink").href = "https://en.wikipedia.org/w/index.php?search=" + encodeURIComponent(f.q);
+  const b = $("mBadge"); b.textContent = badge.text; b.className = badge.cls;
+  const mc = $("mArt").getContext("2d"); mc.imageSmoothingEnabled = false; mc.clearRect(0, 0, 64, 64); mc.drawImage(art.tex, 0, 0);
+  $("modal").classList.remove("hidden"); modalVisible = true; state = "modal";
+  $("mClose").focus({ preventScroll: true });
+}
+function closeModal() {
+  if (!modalVisible) return;
+  modalVisible = false; $("modal").classList.add("hidden");
+  if (pendingWin) { endHunt(true); return; }
+  state = "play"; fireCd = 0.25;
+  if (!coarse && !lockFailed) tryLock();
+}
+function endHunt(win) {
+  state = "end"; try { document.exitPointerLock(); } catch (e) {}
+  const total = Math.floor(time);
+  const finalScore = score;
+  let isBest = false;
+  if (finalScore > bestScore) { bestScore = finalScore; isBest = true; try { localStorage.setItem("ledger_best", String(bestScore)); } catch (e) {} }
+  $("endTitle").textContent = win ? "Hunt complete" : "Out of ammo";
+  $("endSub").textContent = (win ? "All 5 paintings found" : foundList.length + " of 5 paintings found") + " in " + total + "s. Score " + finalScore + (isBest ? ". New best!" : ". Best " + bestScore + ".");
+  const ol = $("endList"); ol.innerHTML = "";
+  foundList.forEach(id => { const li = document.createElement("li"); li.textContent = FACTS[id].year + "  " + FACTS[id].title; ol.appendChild(li); });
+  lastWinSummary = "The Ledger Gallery: " + finalScore + " points, " + foundList.length + "/5 paintings found in " + total + "s. " + location.href;
+  $("end").classList.remove("hidden"); $("modal").classList.add("hidden");
+  updateSeen();
+}
+
+/* ---------- update ---------- */
+function canStand(x, y) {
+  const r = 0.22;
+  return grid[(y - r) | 0][(x - r) | 0] === 0 && grid[(y - r) | 0][(x + r) | 0] === 0 && grid[(y + r) | 0][(x - r) | 0] === 0 && grid[(y + r) | 0][(x + r) | 0] === 0;
+}
+function update(dt) {
+  time += dt; tTime += dt;
+  let fw = 0, st = 0;
+  if (keys.KeyW || keys.ArrowUp) fw += 1; if (keys.KeyS || keys.ArrowDown) fw -= 1;
+  if (keys.KeyD) st += 1; if (keys.KeyA) st -= 1;
+  fw += -jv.y; st += jv.x;
+  const len = Math.hypot(fw, st); if (len > 1) { fw /= len; st /= len; }
+  const sprint = keys.ShiftLeft || keys.ShiftRight || len > 0.97 && Math.hypot(jv.x, jv.y) > 0.95;
+  const spd = 1.9 * (sprint ? 1.7 : 1);
+  const vx = (Math.cos(pl.a) * fw - Math.sin(pl.a) * st) * spd, vy = (Math.sin(pl.a) * fw + Math.cos(pl.a) * st) * spd;
+  const nx = pl.x + vx * dt; if (canStand(nx, pl.y)) pl.x = nx;
+  const ny = pl.y + vy * dt; if (canStand(pl.x, ny)) pl.y = ny;
+  if (keys.ArrowLeft) pl.a -= 2.2 * dt; if (keys.ArrowRight) pl.a += 2.2 * dt;
+  const cxm = pl.x | 0, cym = pl.y | 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cxm + dx, y = cym + dy; if (x >= 0 && y >= 0 && x < N && y < N) vis[y * N + x] = 1; }
+  if (hunt && ammo <= 0 && fireCd <= 0) { outTimer += dt; if (outTimer > 0.7) endHunt(false); } else outTimer = 0;
+}
+
+/* ---------- HUD ---------- */
+const mini = $("mini"), mctx = mini.getContext("2d");
+const CELL = 4; mini.width = mini.height = N * CELL;
+function drawMini() {
+  mctx.clearRect(0, 0, mini.width, mini.height);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const k = y * N + x, a = artAt[k];
+    if (!grid[y][x]) { mctx.fillStyle = P[1]; mctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
+    else if (a) { mctx.fillStyle = a.revealed ? P[2] : P[3]; mctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
+    else { mctx.fillStyle = "#1c1106"; mctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
+  }
+  const px = pl.x * CELL, py = pl.y * CELL;
+  mctx.strokeStyle = "#ff5a3a"; mctx.lineWidth = 2; mctx.beginPath(); mctx.moveTo(px, py); mctx.lineTo(px + Math.cos(pl.a) * 9, py + Math.sin(pl.a) * 9); mctx.stroke();
+  mctx.fillStyle = "#ff5a3a"; mctx.beginPath(); mctx.arc(px, py, 3.2, 0, 7); mctx.fill();
+  mctx.strokeStyle = "#fff0c4"; mctx.lineWidth = 1; mctx.beginPath(); mctx.arc(px, py, 3.2, 0, 7); mctx.stroke();
+}
+const NAMES = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+let lastClue = "", lastStats = "", lastComp = "";
+function hud() {
+  if (state === "title") return;
+  const deg = ((pl.a * 180 / Math.PI + 90) % 360 + 360) % 360, comp = NAMES[Math.round(deg / 45) % 8];
+  if (comp !== lastComp) { $("compass").textContent = comp; lastComp = comp; }
+  const mm = Math.floor(time / 60), ss = Math.floor(time % 60);
+  let s, c = "";
+  if (hunt) {
+    s = "time " + mm + ":" + (ss < 10 ? "0" : "") + ss + "\nammo " + ammo + "\nscore " + score;
+    const f = FACTS[targets[Math.min(ti, targets.length - 1)]];
+    c = "<span>Find " + Math.min(ti + 1, targets.length) + " of " + targets.length + "</span><b>" + f.title + "</b><span>" + f.year + " · " + CATS[f.cat] + " painting</span>";
+  } else s = "free roam\nuncovered " + seen.size + "/" + FACTS.length;
+  if (s !== lastStats) { const el = $("stats"); el.textContent = s; el.classList.toggle("low", hunt && ammo <= 3); lastStats = s; }
+  if (hunt && c !== lastClue) { $("clue").innerHTML = c; lastClue = c; }
+  drawMini();
+}
+
+/* ---------- input ---------- */
+const GAMEKEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ShiftLeft", "ShiftRight", "Space", "Enter", "KeyF"]);
+window.addEventListener("keydown", (e) => {
+  if (e.code === "KeyM") { muted = !muted; try { localStorage.setItem("ledger_mute", muted ? "1" : "0"); } catch (er) {} toast(muted ? "Sound off" : "Sound on"); return; }
+  if (state === "modal") {
+    if (modalVisible && (e.code === "Escape" || e.code === "Enter" || e.code === "Space") && !e.repeat) { e.preventDefault(); closeModal(); }
+    return;
+  }
+  if (state !== "play") return;
+  if (GAMEKEYS.has(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if ((e.code === "Space" || e.code === "Enter" || e.code === "KeyF") && !e.repeat) fire();
+});
+window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+window.addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+document.addEventListener("pointerlockchange", () => { locked = document.pointerLockElement === cv; });
+document.addEventListener("pointerlockerror", () => { lockFailed = true; });
+document.addEventListener("mousemove", (e) => { if (locked && state === "play") pl.a += (e.movementX || 0) * 0.0022; });
+cv.addEventListener("pointerdown", (e) => {
+  if (e.pointerType !== "mouse" || state !== "play") return;
+  if (!locked && !lockFailed) { tryLock(); return; }
+  fire();
+});
+window.addEventListener("contextmenu", (e) => { if (state === "play") e.preventDefault(); });
+
+// touch: joystick + look
+const joy = $("joy"), knob = $("knob"), look = $("look");
+let joyId = null, lookId = null, lookX = 0;
+function joyMove(e) {
+  const r = joy.getBoundingClientRect(), m = r.width / 2 * 0.8;
+  let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  const l = Math.hypot(dx, dy); if (l > m) { dx *= m / l; dy *= m / l; }
+  jv.x = dx / m; jv.y = dy / m; knob.style.transform = "translate(calc(-50% + " + dx + "px), calc(-50% + " + dy + "px))";
+}
+joy.addEventListener("pointerdown", (e) => { e.preventDefault(); joyId = e.pointerId; joy.setPointerCapture(e.pointerId); joyMove(e); });
+joy.addEventListener("pointermove", (e) => { if (e.pointerId === joyId) joyMove(e); });
+const joyEnd = (e) => { if (e.pointerId === joyId) { joyId = null; jv.x = jv.y = 0; knob.style.transform = "translate(-50%,-50%)"; } };
+joy.addEventListener("pointerup", joyEnd); joy.addEventListener("pointercancel", joyEnd);
+look.addEventListener("pointerdown", (e) => { e.preventDefault(); lookId = e.pointerId; lookX = e.clientX; look.setPointerCapture(e.pointerId); });
+look.addEventListener("pointermove", (e) => { if (e.pointerId === lookId && state === "play") { pl.a += (e.clientX - lookX) * 0.0085; lookX = e.clientX; } });
+const lookEnd = (e) => { if (e.pointerId === lookId) lookId = null; };
+look.addEventListener("pointerup", lookEnd); look.addEventListener("pointercancel", lookEnd);
+
+$("fireBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); fire(); });
+$("btnHunt").addEventListener("click", (e) => { e.target.blur(); startGame("hunt"); });
+$("btnRoam").addEventListener("click", (e) => { e.target.blur(); startGame("roam"); });
+$("menuBtn").addEventListener("click", (e) => { e.target.blur(); goTitle(); });
+$("mClose").addEventListener("click", closeModal);
+$("endAgain").addEventListener("click", () => startGame("hunt"));
+$("endMenu").addEventListener("click", goTitle);
+$("endShare").addEventListener("click", () => {
+  try { navigator.clipboard.writeText(lastWinSummary).then(() => { $("endShare").textContent = "Copied"; }, () => { $("endShare").textContent = "Copy blocked"; }); } catch (e) { $("endShare").textContent = "Copy blocked"; }
+});
+
+/* ---------- main loop ---------- */
+newLevel(GALLERY_SEED);
+updateSeen();
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  fireCd = Math.max(0, fireCd - dt); recoil = Math.max(0, recoil - dt * 6); flash = Math.max(0, flash - dt);
+  if (toastT > 0) { toastT -= dt; if (toastT <= 0) $("toast").classList.remove("on"); }
+  if (state === "title") pl.a += dt * 0.25;
+  else if (state === "play") update(dt);
+  render();
+  if (state !== "title") drawGun();
+  hud();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
