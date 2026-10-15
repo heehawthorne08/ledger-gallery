@@ -273,7 +273,7 @@ const sfx = {
 /* ---------- canvas / render setup ---------- */
 const cv = $("view"), ctx = cv.getContext("2d");
 let W = 480, H = 300, unit = 0, gradC, gradF;
-const PL = 0.66;
+const PL = 0.82;
 function resize() {
   W = window.innerWidth > 900 ? 640 : 480;
   H = clamp(Math.round(W * window.innerHeight / window.innerWidth), 220, 720);
@@ -374,33 +374,53 @@ function stampHole(tex, tx, ty) {
 }
 
 /* ---------- level ---------- */
-const MZ = 16, N = MZ * 2 + 1;
+// Rooms are MZ x MZ. Each room is WIDE cells across, joined by WIDE-wide doorways,
+// with a single 1-cell wall between rooms - wide open halls, walls still 1 cell thick
+// (so painting placement/rendering per wall cell is unchanged).
+const MZ = 14, WIDE = 3, STEP = WIDE + 1, N = MZ * STEP + 1;
 const GALLERY_SEED = 20081031;   // fixed layout: same maze and same paintings every run
 let grid, texArr, artAt, vis;
+function openBlock(grid, mx, my) {
+  const x0 = mx * STEP + 1, y0 = my * STEP + 1;
+  for (let y = y0; y < y0 + WIDE; y++) for (let x = x0; x < x0 + WIDE; x++) grid[y][x] = 0;
+}
+function openDoor(grid, mx, my, dx, dy) {
+  if (dx !== 0) { const bx = (dx > 0 ? mx + 1 : mx) * STEP, y0 = my * STEP + 1; for (let y = y0; y < y0 + WIDE; y++) grid[y][bx] = 0; }
+  else { const by = (dy > 0 ? my + 1 : my) * STEP, x0 = mx * STEP + 1; for (let x = x0; x < x0 + WIDE; x++) grid[by][x] = 0; }
+}
 function newLevel(seed) {
   const rng = mulberry32(seed);
   grid = Array.from({ length: N }, () => new Uint8Array(N).fill(1));
-  const stack = [[1, 1]]; grid[1][1] = 0;
-  const dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+  openBlock(grid, 0, 0);
+  const stack = [[0, 0]];
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   while (stack.length) {
-    const [x, y] = stack[stack.length - 1];
-    const opts = dirs.filter(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx > 0 && ny > 0 && nx < N - 1 && ny < N - 1 && grid[ny][nx] === 1; });
+    const [mx, my] = stack[stack.length - 1];
+    const opts = dirs.filter(([dx, dy]) => { const nx = mx + dx, ny = my + dy; return nx >= 0 && ny >= 0 && nx < MZ && ny < MZ && grid[ny * STEP + 1][nx * STEP + 1] === 1; });
     if (!opts.length) { stack.pop(); continue; }
     const [dx, dy] = opts[(rng() * opts.length) | 0];
-    grid[y + dy / 2][x + dx / 2] = 0; grid[y + dy][x + dx] = 0; stack.push([x + dx, y + dy]);
+    openDoor(grid, mx, my, dx, dy); openBlock(grid, mx + dx, my + dy); stack.push([mx + dx, my + dy]);
   }
-  let loops = 26, tries = 0;
-  while (loops > 0 && tries < 800) {
+  let loops = 20, tries = 0;
+  while (loops > 0 && tries < 600) {
     tries++;
-    const x = 1 + ((rng() * (N - 2)) | 0), y = 1 + ((rng() * (N - 2)) | 0);
-    if ((x + y) % 2 !== 1 || grid[y][x] === 0) continue;
-    const horiz = x % 2 === 0;
-    const a = horiz ? grid[y][x - 1] : grid[y - 1][x], b = horiz ? grid[y][x + 1] : grid[y + 1][x];
-    if (a === 0 && b === 0) { grid[y][x] = 0; loops--; }
+    const vertical = rng() < 0.5;
+    if (vertical) {
+      const mx = 1 + ((rng() * (MZ - 1)) | 0), my = (rng() * MZ) | 0, bx = mx * STEP, y0 = my * STEP + 1;
+      if (grid[y0][bx] !== 1) continue;
+      openDoor(grid, mx - 1, my, 1, 0); loops--;
+    } else {
+      const my = 1 + ((rng() * (MZ - 1)) | 0), mx = (rng() * MZ) | 0, by = my * STEP, x0 = mx * STEP + 1;
+      if (grid[by][x0] !== 1) continue;
+      openDoor(grid, mx, my - 1, 0, 1); loops--;
+    }
   }
   texArr = new Array(N * N).fill(null); artAt = new Array(N * N).fill(null); vis = new Uint8Array(N * N);
   const segs = [];
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (grid[y][x] === 1 && (x + y) % 2 === 1) segs.push(y * N + x);
+  for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) {
+    if (grid[y][x] !== 1) continue;
+    if (grid[y][x - 1] === 0 || grid[y][x + 1] === 0 || grid[y - 1][x] === 0 || grid[y + 1][x] === 0) segs.push(y * N + x);
+  }
   shuffle(segs, rng);
   const ids = shuffle(FACTS.map(f => f.id), rng);
   const n = Math.min(ids.length, segs.length);
@@ -408,7 +428,7 @@ function newLevel(seed) {
     const tex = makeArt(FACTS[ids[i]]);
     texArr[segs[i]] = tex; artAt[segs[i]] = { id: ids[i], hits: 0, revealed: false, tex, key: segs[i] };
   }
-  pl.x = 1.5; pl.y = 1.5; pl.a = grid[1][2] === 0 ? 0 : Math.PI / 2;
+  pl.x = 2.5; pl.y = 2.5; pl.a = grid[2][4] === 0 ? 0 : Math.PI / 2;
 }
 
 /* ---------- raycasting ---------- */
@@ -420,7 +440,7 @@ function cast(px, py, rdx, rdy) {
   if (rdx < 0) { sx = -1; sdx = (px - mx) * ddx; } else { sx = 1; sdx = (mx + 1 - px) * ddx; }
   if (rdy < 0) { sy = -1; sdy = (py - my) * ddy; } else { sy = 1; sdy = (my + 1 - py) * ddy; }
   let side = 0, hit = 0;
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 160; i++) {
     if (sdx < sdy) { sdx += ddx; mx += sx; side = 0; } else { sdy += ddy; my += sy; side = 1; }
     if (mx < 0 || my < 0 || mx >= N || my >= N) break;
     if (grid[my][mx] === 1) { hit = 1; break; }
