@@ -96,7 +96,7 @@ a.btnlink:hover{background:rgba(255,217,138,.12)}
       <ul class="how">
         <li>Hunt: a clue names a painting. Find it before your ammo runs out. A correct find refills some.</li>
         <li>Fire twice at a painting to reveal what happened.</li>
-        <li>Move: WASD, or the stick in the bottom left. Look: arrow keys, or drag anywhere on the right side of the screen. Shift sprints.</li>
+        <li>Move: WASD, or the stick in the bottom left (push up/down to walk, left/right to turn). Look: arrow keys, or drag anywhere on the right side of the screen. Shift sprints.</li>
         <li>Fire: click, Space, Enter, or the FIRE button.</li>
         <li>Each painting shows its year on a plaque. Use that.</li>
         <li>The maze and painting positions are the same every run. The map (top right) shows your position; bright squares are paintings you haven't revealed yet.</li>
@@ -606,14 +606,15 @@ function update(dt) {
   let fw = 0, st = 0;
   if (keys.KeyW || keys.ArrowUp) fw += 1; if (keys.KeyS || keys.ArrowDown) fw -= 1;
   if (keys.KeyD) st += 1; if (keys.KeyA) st -= 1;
-  fw += -jv.y; st += jv.x;
+  fw += -jv.y;                                     // joystick forward/back = walk
   const len = Math.hypot(fw, st); if (len > 1) { fw /= len; st /= len; }
-  const sprint = keys.ShiftLeft || keys.ShiftRight || len > 0.97 && Math.hypot(jv.x, jv.y) > 0.95;
+  const sprint = keys.ShiftLeft || keys.ShiftRight || Math.abs(jv.y) > 0.95;
   const spd = 1.9 * (sprint ? 1.7 : 1);
   const vx = (Math.cos(pl.a) * fw - Math.sin(pl.a) * st) * spd, vy = (Math.sin(pl.a) * fw + Math.cos(pl.a) * st) * spd;
   const nx = pl.x + vx * dt; if (canStand(nx, pl.y)) pl.x = nx;
   const ny = pl.y + vy * dt; if (canStand(pl.x, ny)) pl.y = ny;
   if (keys.ArrowLeft) pl.a -= 2.2 * dt; if (keys.ArrowRight) pl.a += 2.2 * dt;
+  pl.a += jv.x * 2.4 * dt;                          // joystick left/right = turn the body
   const cxm = pl.x | 0, cym = pl.y | 0;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cxm + dx, y = cym + dy; if (x >= 0 && y >= 0 && x < N && y < N) vis[y * N + x] = 1; }
   if (hunt && ammo <= 0 && fireCd <= 0) { outTimer += dt; if (outTimer > 0.7) endHunt(false); } else outTimer = 0;
